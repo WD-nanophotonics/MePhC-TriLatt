@@ -214,7 +214,11 @@ class RecordControlTests(unittest.TestCase):
         with (
             patch.object(config, "make_band", return_value=fake_band),
             patch.object(config, "build_pattern", return_value=object()),
-            patch.object(band_runner, "save_record") as save,
+            patch.object(
+                band_runner,
+                "save_record_outputs",
+                return_value=(Path("/tmp/canonical.pkl"), None),
+            ) as save_outputs,
         ):
             band_runner.compute_band_structure(
                 config,
@@ -226,8 +230,9 @@ class RecordControlTests(unittest.TestCase):
                 save=False,
                 save_tmp=False,
             )
-        save.assert_called_once()
-        self.assertRegex(save.call_args.args[1].name, r"^band_nb1_gkm_\d{8}-\d{6}\.pkl$")
+        save_outputs.assert_called_once()
+        self.assertTrue(save_outputs.call_args.kwargs["archive"])
+        self.assertEqual(save_outputs.call_args.kwargs["archive_params"]["path"], "gkm")
 
 
 class BerryBandTests(unittest.TestCase):

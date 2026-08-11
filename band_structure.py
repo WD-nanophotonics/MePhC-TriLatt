@@ -8,6 +8,7 @@ if str(project_root) not in sys.path:
 import config
 
 from mephc.plotting import plot_band_path
+from mephc.workflows import save_record_outputs
 from mephc.preview import preview_mpb_dielectric, preview_pattern
 from mephc.records import (
     canonical_record_path,
@@ -264,25 +265,23 @@ def compute_band_structure(
         data=result,
         source_case=source_case,
     )
-    canonical_path = canonical_record_path(project_root, geometry_id, "band", task_params)
-    latest_path = tmp_dir(project_root) / "band_latest.pkl"
-    if save:
-        save_record(record, canonical_path)
-        update_archive_manifest(PROJECT_ROOT, canonical_path, record)
-    if archive:
-        archive_name = make_record_name(
-            "band",
-            num_bands=num_bands,
-            path="gkm",
-            step=berry_step if compute_bc else None,
-            created_at=record["created_at"],
-        )
-        archive_path = data_dir(project_root, geometry_id) / archive_name
-        save_record(record, archive_path)
-        update_archive_manifest(project_root, archive_path, record)
-    if save_tmp:
-        save_record(record, latest_path)
-    return record, canonical_path, latest_path if save_tmp else None
+    canonical_path, latest_path = save_record_outputs(
+        project_root,
+        geometry_id,
+        "band",
+        task_params,
+        record,
+        archive=archive,
+        archive_params={
+            "num_bands": num_bands,
+            "path": "gkm",
+            "step": berry_step if compute_bc else None,
+        },
+        save=save,
+        save_tmp=save_tmp,
+        tmp_name="band_latest.pkl",
+    )
+    return record, canonical_path, latest_path
 
 
 def plot_band_record(

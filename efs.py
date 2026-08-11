@@ -19,6 +19,7 @@ from workflow import (
 
 from mephc.efs import EFSResult, plot_efs
 from mephc.kspace import TriangularKSpace
+from mephc.workflows import save_record_outputs
 from mephc.records import (
     canonical_record_path,
     data_dir,
@@ -199,25 +200,23 @@ def compute_efs(
         data=result,
         source_case=source_case,
     )
-    canonical_path = canonical_record_path(project_root, geometry_id, "efs", task_params)
-    latest_path = tmp_dir(project_root) / "efs_latest.pkl"
-    if save:
-        save_record(record, canonical_path)
-        update_archive_manifest(PROJECT_ROOT, canonical_path, record)
-    if archive:
-        archive_name = make_record_name(
-            "efs",
-            band_index=band_index,
-            grid_n=grid_n,
-            symmetry=actual_mode,
-            created_at=record["created_at"],
-        )
-        archive_path = data_dir(project_root, geometry_id) / archive_name
-        save_record(record, archive_path)
-        update_archive_manifest(PROJECT_ROOT, archive_path, record)
-    if save_tmp:
-        save_record(record, latest_path)
-    return record, canonical_path, latest_path if save_tmp else None
+    canonical_path, latest_path = save_record_outputs(
+        project_root,
+        geometry_id,
+        "efs",
+        task_params,
+        record,
+        archive=archive,
+        archive_params={
+            "band_index": band_index,
+            "grid_n": grid_n,
+            "symmetry": actual_mode,
+        },
+        save=save,
+        save_tmp=save_tmp,
+        tmp_name="efs_latest.pkl",
+    )
+    return record, canonical_path, latest_path
 
 
 def plot_efs_record(

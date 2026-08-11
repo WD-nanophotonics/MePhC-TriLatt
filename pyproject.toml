@@ -9,7 +9,7 @@ description = "Triangular-lattice Meep/MPB case workflows using MePhC."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "mephc @ git+https://github.com/WD-nanophotonics/MePhC.git@v0.1.0",
+  "mephc @ git+https://github.com/WD-nanophotonics/MePhC.git@v0.1.1",
 ]
 
 [tool.setuptools]
