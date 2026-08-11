@@ -97,7 +97,11 @@ def hbz_sampling(config_module, *, grid_n, shrinking, symmetry_mode):
     if not 0 <= shrinking < 2.0 / 3.0:
         raise ValueError("shrinking must satisfy 0 <= shrinking < 2/3.")
     actual_mode = resolve_symmetry_mode(config_module, symmetry_mode)
-    kspace = TriangularKSpace(N=grid_n, shrinking=shrinking)
+    kspace = TriangularKSpace(
+        N=grid_n,
+        shrinking=shrinking,
+        lattice_model=config_module.canonical_lattice(),
+    )
     points = kspace.mini_space() if actual_mode == "c3" else kspace.shrunken_hbz()
     points = np.asarray(points, dtype=float)
     if len(points) == 0:

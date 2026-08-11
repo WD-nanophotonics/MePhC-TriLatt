@@ -1,5 +1,6 @@
 from numbers import Integral, Real
 from mephc.band import Band
+from mephc.bravais import BravaisLattice2D
 from mephc.kspace import triangular_gkm_path
 
 
@@ -104,6 +105,17 @@ def geometry_parameters():
     return parameters
 
 
+def canonical_lattice():
+    """Return a fresh canonical undeformed triangular lattice model.
+
+    The factory is intentionally geometry-only: R2 does not expose stretch
+    parameters.  Band, real-space placement, and k-space helpers consume this
+    same model instance within each workflow call.
+    """
+
+    return BravaisLattice2D.triangular()
+
+
 def make_band(*, resolution):
     """Build the MePhC solver; its triangular geometry lattice is the default."""
     validate_geometry()
@@ -114,6 +126,7 @@ def make_band(*, resolution):
         n_eff=n_eff,
         h=height,
         resolution=resolution,
+        lattice_model=canonical_lattice(),
     )
 
 
