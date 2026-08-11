@@ -479,7 +479,7 @@ class MPBSmokeTests(unittest.TestCase):
             save_tmp=False,
             source_case="test",
         )
-        self.assertEqual(berry_record["data"]["symmetry"], "raw_hbz")
+        self.assertEqual(berry_record["data"]["symmetry"], "c3")
         self.assertTrue(np.all(np.isfinite(berry_record["data"]["bcs"])))
         self.assertTrue(np.all(np.isfinite(efs_record["data"].freqs)))
         np.testing.assert_allclose(

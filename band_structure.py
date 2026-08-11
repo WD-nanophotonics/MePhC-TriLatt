@@ -279,7 +279,7 @@ def compute_band_structure(
         )
         archive_path = data_dir(project_root, geometry_id) / archive_name
         save_record(record, archive_path)
-        update_archive_manifest(PROJECT_ROOT, archive_path, record)
+        update_archive_manifest(project_root, archive_path, record)
     if save_tmp:
         save_record(record, latest_path)
     return record, canonical_path, latest_path if save_tmp else None
