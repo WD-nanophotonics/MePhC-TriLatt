@@ -69,6 +69,8 @@ def resolve_existing_record(
 def has_exact_c3_geometry(config_module):
     """Return whether every active regular polygon has exact 120-degree symmetry."""
     config_module.validate_geometry()
+    if not config_module.canonical_lattice().supports_legacy("c3"):
+        return False
     active_sides = [config_module.n1]
     if config_module.r2 is not None:
         active_sides.append(config_module.n2)
@@ -76,17 +78,20 @@ def has_exact_c3_geometry(config_module):
 
 
 def resolve_symmetry_mode(config_module, symmetry_mode):
-    """Resolve ``auto`` to an exact C3 reduction or direct full-HBZ sampling."""
+    """Resolve identity C3 reduction or generic current-BZ sampling."""
     if symmetry_mode not in {"auto", "c3", "raw_hbz"}:
         raise ValueError("symmetry_mode must be 'auto', 'c3', or 'raw_hbz'.")
     exact_c3 = has_exact_c3_geometry(config_module)
+    identity_lattice = config_module.canonical_lattice().is_identity
     if symmetry_mode == "auto":
-        return "c3" if exact_c3 else "raw_hbz"
+        return "c3" if exact_c3 else ("raw_hbz" if identity_lattice else "full_bz")
     if symmetry_mode == "c3" and not exact_c3:
         raise ValueError(
             "C3 reduction requires every active polygon side count to be "
             "divisible by 3. Use symmetry_mode='auto' or 'raw_hbz'."
         )
+    if not identity_lattice and symmetry_mode == "raw_hbz":
+        raise ValueError("raw_hbz is an identity triangular compatibility domain; use symmetry_mode='auto'")
     return symmetry_mode
 
 
@@ -102,7 +107,12 @@ def hbz_sampling(config_module, *, grid_n, shrinking, symmetry_mode):
         shrinking=shrinking,
         lattice_model=config_module.canonical_lattice(),
     )
-    points = kspace.mini_space() if actual_mode == "c3" else kspace.shrunken_hbz()
+    if actual_mode == "c3":
+        points = kspace.mini_space()
+    elif actual_mode == "raw_hbz":
+        points = kspace.shrunken_hbz()
+    else:
+        points = kspace.full_bz()
     points = np.asarray(points, dtype=float)
     if len(points) == 0:
         raise ValueError(
@@ -110,6 +120,18 @@ def hbz_sampling(config_module, *, grid_n, shrinking, symmetry_mode):
             "or reduce shrinking."
         )
     return kspace, actual_mode, points
+
+
+def domain_name(actual_mode):
+    """Map a sampling mode to an honest record-domain label."""
+    return "k_centered_hbz" if actual_mode in {"c3", "raw_hbz"} else "first_bz"
+
+
+def domain_outline(kspace, actual_mode):
+    """Return the current outline used by Berry/EFS plots."""
+    if actual_mode in {"c3", "raw_hbz"}:
+        return np.asarray(kspace.shrunken_hbz_poly, dtype=float)
+    return np.asarray(kspace.first_bz_poly, dtype=float)
 
 
 def c3_expand_arrays(kspace, raw_k_points, *raw_arrays):

@@ -1,7 +1,9 @@
 from numbers import Integral, Real
+import numpy as np
 from mephc.band import Band
+from mephc.affine import AffineTransform2D
 from mephc.bravais import BravaisLattice2D
-from mephc.kspace import triangular_gkm_path
+from mephc.kspace import generic_bz_path, triangular_gkm_path
 
 
 # All physical lengths below use nm. ``a`` is the real-space lattice period;
@@ -29,6 +31,12 @@ n_eff = 2.7
 # Meep object height in nm. This 2D workflow only needs it to span the cell.
 height = 100
 
+# Global direct-space uniaxial deformation.  The axis angle is measured
+# counter-clockwise from +x in Cartesian coordinates.  At factor == 1 the
+# angle is intentionally canonicalized away and legacy IDs remain unchanged.
+stretch_factor = 1.0
+stretch_angle_degrees = 0.0
+
 
 def _compact_number(value):
     if isinstance(value, Integral):
@@ -55,6 +63,13 @@ def validate_geometry():
         raise ValueError("n_eff must be a positive number.")
     if not isinstance(height, Real) or isinstance(height, bool) or height <= 0:
         raise ValueError("height must be a positive number.")
+    if not isinstance(stretch_factor, Real) or isinstance(stretch_factor, bool) or not float(stretch_factor) > 0:
+        raise ValueError("stretch_factor must be a positive finite number.")
+    if not np.isfinite(float(stretch_factor)):
+        raise ValueError("stretch_factor must be finite.")
+    if not isinstance(stretch_angle_degrees, Real) or isinstance(stretch_angle_degrees, bool) or not np.isfinite(float(stretch_angle_degrees)):
+        raise ValueError("stretch_angle_degrees must be finite.")
+    AffineTransform2D.uniaxial(float(stretch_factor), float(stretch_angle_degrees))
     _validate_polygon(n1, theta1, "n1")
 
     if r2 is None:
@@ -70,7 +85,7 @@ def geometry_id():
     """Return a compact ID made only from the active physical parameters."""
     validate_geometry()
     if r2 is None:
-        return (
+        result = (
             f"a{_compact_number(a)}"
             f"_r{_compact_number(r1)}"
             f"_n{_compact_number(n1)}"
@@ -78,14 +93,18 @@ def geometry_id():
             f"_neff{_compact_number(n_eff)}"
             f"_h{_compact_number(height)}"
         )
-    return (
+    else:
+        result = (
         f"a{_compact_number(a)}"
         f"_r{_compact_number(r1)}-{_compact_number(r2)}"
         f"_n{_compact_number(n1)}-{_compact_number(n2)}"
         f"_t{_compact_number(theta1)}-{_compact_number(theta2)}"
         f"_neff{_compact_number(n_eff)}"
         f"_h{_compact_number(height)}"
-    )
+        )
+    if float(stretch_factor) != 1.0:
+        result += f"_s{_compact_number(stretch_factor)}_ang{_compact_number(stretch_angle_degrees)}"
+    return result
 
 
 def geometry_parameters():
@@ -102,6 +121,8 @@ def geometry_parameters():
     }
     if r2 is not None:
         parameters.update({"n2": n2, "theta2": theta2})
+    if float(stretch_factor) != 1.0:
+        parameters.update({"stretch_factor": float(stretch_factor), "stretch_angle_degrees": float(stretch_angle_degrees)})
     return parameters
 
 
@@ -113,7 +134,9 @@ def canonical_lattice():
     same model instance within each workflow call.
     """
 
-    return BravaisLattice2D.triangular()
+    base = BravaisLattice2D.triangular()
+    transform = AffineTransform2D.uniaxial(float(stretch_factor), float(stretch_angle_degrees))
+    return base.transformed(transform)
 
 
 def make_band(*, resolution):
@@ -145,4 +168,5 @@ def k_point():
 
 def band_path():
     """Return the Gamma-K-M-Gamma path in Cartesian reciprocal coordinates."""
-    return triangular_gkm_path()
+    lattice = canonical_lattice()
+    return triangular_gkm_path() if lattice.supports_legacy("gkm") else generic_bz_path(lattice)

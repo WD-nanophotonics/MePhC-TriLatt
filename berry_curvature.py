@@ -13,6 +13,8 @@ from workflow import (
     HBZ_DOMAIN,
     c3_expand_arrays,
     compute_parameters,
+    domain_name,
+    domain_outline,
     hbz_sampling,
     resolve_existing_record,
 )
@@ -145,7 +147,7 @@ def compute_berry_curvature(
         "shrinking": float(shrinking),
         "step": float(step),
         "band_index": band_index,
-        "domain": HBZ_DOMAIN,
+        "domain": domain_name(actual_mode),
         "symmetry_policy": symmetry_mode,
         "symmetry": actual_mode,
     }
@@ -190,9 +192,10 @@ def compute_berry_curvature(
             "bcs": final_bcs,
             "grid_n": int(grid_n),
             "shrinking": float(shrinking),
-            "domain": HBZ_DOMAIN,
+        "domain": domain_name(actual_mode),
             "symmetry_policy": symmetry_mode,
             "symmetry": actual_mode,
+            "domain_outline": np.asarray(domain_outline(kspace, actual_mode), dtype=float),
         }
     )
     geometry_id = config_module.geometry_id()
@@ -279,11 +282,12 @@ def plot_berry_record(
         show=False,
         **params,
     )
-    kspace = TriangularKSpace(
-        N=int(record["task_params"]["grid_n"]),
-        shrinking=float(record["task_params"]["shrinking"]),
-    )
-    outline = np.asarray(kspace.shrunken_hbz_poly, dtype=float)
+    outline_value = record["data"].get("domain_outline")
+    if outline_value is None:
+        kspace = TriangularKSpace(N=int(record["task_params"]["grid_n"]), shrinking=float(record["task_params"]["shrinking"]))
+        outline = np.asarray(kspace.shrunken_hbz_poly, dtype=float)
+    else:
+        outline = np.asarray(outline_value, dtype=float)
     outline = np.vstack([outline, outline[0]])
     ax.plot(outline[:, 0], outline[:, 1], color="black", linewidth=1.0)
     fig.tight_layout()

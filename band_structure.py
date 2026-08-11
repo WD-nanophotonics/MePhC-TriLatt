@@ -225,9 +225,10 @@ def compute_band_structure(
         raise ValueError("berry_step must be positive when compute_bc=True.")
 
     geometry_id = config_module.geometry_id()
+    path_name = "gkm" if config_module.canonical_lattice().supports_legacy("gkm") else "generic_bz"
     task_params = {
         "num_bands": int(num_bands),
-        "path": "gkm",
+        "path": path_name,
         "n_per_segment": int(n_per_segment),
         "compute_bc": bool(compute_bc),
         "berry_step": float(berry_step) if compute_bc else None,
@@ -274,7 +275,7 @@ def compute_band_structure(
         archive=archive,
         archive_params={
             "num_bands": num_bands,
-            "path": "gkm",
+            "path": path_name,
             "step": berry_step if compute_bc else None,
         },
         save=save,
