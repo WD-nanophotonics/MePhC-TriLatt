@@ -19,13 +19,14 @@ num_bands = 3
 
 
 def compute_k_frequencies(config_module=config, *, resolution, num_bands):
-    """Compute normalized and THz frequencies at the Cartesian K point."""
+    """Compute frequencies at identity K or non-identity ``tracked_K1``."""
     if resolution < 1:
         raise ValueError("resolution must be >= 1.")
     if num_bands < 1:
         raise ValueError("num_bands must be >= 1.")
 
-    k = np.asarray(config_module.k_point(), dtype=float)
+    landmark = config_module.reciprocal_landmark()
+    k = np.asarray(landmark["cartesian"], dtype=float)
     if k.shape != (2,):
         raise ValueError("config.k_point() must return a 2D Cartesian k-point.")
 
@@ -43,12 +44,15 @@ def compute_k_frequencies(config_module=config, *, resolution, num_bands):
         "resolution": int(resolution),
         "polarization": band.polarization,
         "k_coordinate": "cartesian_reciprocal",
+        "landmark_kind": landmark["landmark_kind"],
+        "display_label": landmark["display_label"],
+        "landmark": landmark,
     }
 
 
 def print_k_frequencies(result):
     kx, ky = result["k_point"]
-    print(f"K point (Cartesian reciprocal): ({kx:.12g}, {ky:.12g})")
+    print(f"{result['display_label']} (Cartesian reciprocal): ({kx:.12g}, {ky:.12g})")
     print(f"polarization: {result['polarization']}")
     print(f"resolution: {result['resolution']}")
     print("band  normalized_frequency  actual_frequency_THz")

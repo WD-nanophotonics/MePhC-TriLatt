@@ -3,6 +3,7 @@ import numpy as np
 from mephc.band import Band
 from mephc.affine import AffineTransform2D
 from mephc.bravais import BravaisLattice2D
+from mephc.bz import tracked_landmark
 from mephc.kspace import generic_bz_path, triangular_gkm_path
 
 
@@ -161,9 +162,31 @@ def build_pattern():
     return band.create_unitcell(n1, theta1, n2, theta2, show=False)
 
 
+def reciprocal_landmark():
+    """Return identity K or current-BZ ``tracked_K1`` metadata."""
+    lattice = canonical_lattice()
+    landmark = tracked_landmark(lattice)
+    selected = np.asarray(landmark["cartesian"], dtype=float)
+    result = dict(landmark)
+    result.update(
+        {
+            "cartesian": selected,
+            "solver_reciprocal_fractional": lattice.cartesian_to_reciprocal(selected),
+            "deformation_factor": float(stretch_factor),
+            "deformation_angle_degrees": float(stretch_angle_degrees)
+            if float(stretch_factor) != 1.0
+            else 0.0,
+            "lattice": lattice.metadata(),
+            "bz_vertices": np.asarray(landmark["bz"].vertices, dtype=float),
+        }
+    )
+    result.pop("bz", None)
+    return result
+
+
 def k_point():
-    """Return K in Cartesian reciprocal coordinates."""
-    return (2.0 / 3.0, 0.0)
+    """Return legacy K or the explicit current tracked landmark."""
+    return tuple(np.asarray(reciprocal_landmark()["cartesian"], dtype=float))
 
 
 def band_path():

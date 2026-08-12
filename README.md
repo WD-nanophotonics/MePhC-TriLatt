@@ -42,10 +42,38 @@ cd /home/icy/TriLatt
 /home/icy/miniconda3/envs/mp/bin/python efs.py
 ```
 
-The K script prints normalized and THz frequencies at Cartesian K=`(2/3,0)`.
-The band script evaluates Gamma-K-M-Gamma. The standalone Berry and EFS
-scripts sample the triangular HBZ centered on K=`(2/3,0)`. Records are saved
+The K script prints normalized and THz frequencies at the configured reciprocal
+landmark. Identity uses the legacy Cartesian K=`(2/3,0)`. Under non-identity
+deformation the label is explicitly `tracked_K1`, selected from the current
+Wigner-Seitz first BZ; it is not an assertion of unbroken C3 symmetry. The
+band script uses Gamma-K-M-Gamma only for the identity-compatible lattice and
+uses current-BZ generic landmarks after deformation. Berry and EFS likewise
+disable C3/HBZ reduction for non-identity deformation. Records are saved
 under `data/<parameter_id>/` and plots under `image/<parameter_id>/`.
+
+## Global affine deformation
+
+`config.py` exposes one global periodic deformation:
+
+```python
+stretch_factor = 1.0
+stretch_angle_degrees = 0.0
+```
+
+The current direct basis is `A = F @ A0`, and the reciprocal basis is derived
+from that current basis. Every sublattice center, including the second
+honeycomb sublattice, follows `F @ center_reference`. Polygon-local vertex
+offsets remain unchanged, so each feature stays rigid: side lengths,
+orientation, area, side count, and material are preserved. At factor `1.0`
+the angle is canonicalized and the legacy geometry IDs and numerical path are
+retained.
+
+For non-identity deformation, `auto` mode does not reuse C3 reduction,
+K-centered HBZ assumptions, or fixed reference K coordinates. The current BZ
+and current reciprocal coordinates are stored in metadata. This workflow is
+limited to global affine periodic deformation; local/non-affine deformation,
+supercells, automatic symmetry discovery, and the SqrLatt downstream project
+remain out of scope.
 
 ## Band Berry coloring
 
