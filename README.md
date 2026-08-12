@@ -1,8 +1,9 @@
 # TriLatt
 
 TriLatt is a parameter-driven triangular/honeycomb MPB workflow built on the
-public `WD-nanophotonics/MePhC` package. Geometry is controlled only by `r`, `n`, and `theta` in
-`config.py`; there is no hole-shape or lattice-type setting.
+public `WD-nanophotonics/MePhC` package. Geometry is controlled by the active
+polygon parameters and the optional global affine parameters in `config.py`;
+there is no hole-shape or lattice-type setting.
 
 Install the pinned public MePhC release in the `mp` environment:
 
@@ -25,12 +26,19 @@ theta2 = 60
 
 n_eff = 2.7
 height = 100
+
+# Optional global affine deformation of the periodic direct lattice.
+stretch_factor = 1.0
+stretch_angle_degrees = 0.0
 ```
 
 - `r2 is None` calls `create_unitcell(n1, theta1)`. `n2/theta2` are ignored.
 - A numeric `r2` calls `create_unitcell(n1, theta1, n2, theta2)`.
 - `n` is the side count: `3` is a triangle and `16` approximates a circle.
 - `theta` is passed directly to MePhC in degrees.
+- `stretch_factor` and `stretch_angle_degrees` define the global affine map
+  for the periodic lattice. They are geometry parameters, not solver
+  resolution or plotting parameters.
 
 ## Run
 
@@ -46,10 +54,11 @@ The K script prints normalized and THz frequencies at the configured reciprocal
 landmark. Identity uses the legacy Cartesian K=`(2/3,0)`. Under non-identity
 deformation the label is explicitly `tracked_K1`, selected from the current
 Wigner-Seitz first BZ; it is not an assertion of unbroken C3 symmetry. The
-band script uses Gamma-K-M-Gamma only for the identity-compatible lattice and
-uses current-BZ generic landmarks after deformation. Berry and EFS likewise
-disable C3/HBZ reduction for non-identity deformation. Records are saved
-under `data/<parameter_id>/` and plots under `image/<parameter_id>/`.
+fixed Gamma-K-M-Gamma path, fixed K, and K-centered HBZ descriptions below are
+therefore identity-only compatibility behavior. The band script uses a
+current-BZ generic path after deformation. Berry and EFS use the current full
+BZ domain after deformation and disable invalid C3/HBZ reduction. Records are
+saved under `data/<parameter_id>/` and plots under `image/<parameter_id>/`.
 
 ## Global affine deformation
 
@@ -73,7 +82,9 @@ K-centered HBZ assumptions, or fixed reference K coordinates. The current BZ
 and current reciprocal coordinates are stored in metadata. This workflow is
 limited to global affine periodic deformation; local/non-affine deformation,
 supercells, automatic symmetry discovery, and the SqrLatt downstream project
-remain out of scope.
+remain out of scope. Record data and rendering metadata are separate: solver
+parameters identify and cache the `.pkl` record, while plot settings only
+control regeneration of derived images.
 
 ## Band Berry coloring
 
@@ -117,7 +128,9 @@ complete HBZ. Explicit `symmetry_mode="c3"` rejects non-C3 geometry;
 
 ## EFS
 
-`efs.py` uses the same K-centered HBZ and safe symmetry rule:
+For identity deformation, `efs.py` uses the legacy K-centered HBZ and its
+safe symmetry rule. For non-identity deformation it uses the current full BZ
+domain and does not assume a fixed K-centered HBZ:
 
 ```python
 resolution = 64
