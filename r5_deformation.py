@@ -5,6 +5,7 @@ from __future__ import annotations
 from mephc.affine import AffineTransform2D
 from mephc.deformation import canonicalize_field, periodic_supercell_field
 from mephc.deformation_geometry import replicated_rigid_pattern
+from mephc.patterns import convert_to_one_layer_pattern_list
 from mephc.r5 import primitive_guard, record_identity, supercell_metadata
 
 
@@ -19,7 +20,7 @@ def global_field(config_module):
 
 def _pattern_data(config_module):
     pattern = config_module.build_pattern()
-    return getattr(pattern, "pattern", pattern)
+    return convert_to_one_layer_pattern_list(getattr(pattern, "pattern", pattern))
 
 
 def finite_patch_preview(config_module, field, replication=(3, 3), pattern=None):

@@ -12,6 +12,25 @@ Install the pinned public MePhC release in the `mp` environment:
   "mephc @ git+https://github.com/WD-nanophotonics/MePhC.git@v0.1.1"
 ```
 
+## Local VS Code one-click run
+
+When the repositories are checked out as sibling directories:
+
+<pre>
+/home/icy/MePhC
+/home/icy/TriLatt
+</pre>
+
+Open the TriLatt folder in VS Code using the WSL window. The workspace
+configuration selects /home/icy/miniconda3/envs/mp/bin/python and adds the
+adjacent local MePhC checkout to both Python analysis and the integrated
+terminal PYTHONPATH. No pip installation or network access is needed for
+this local workflow.
+
+In Run and Debug, press F5 to run the default band_structure.py
+configuration. The same menu provides one-click entries for
+frequency_at_k.py, berry_curvature.py, and efs.py.
+
 ## Geometry parameters
 
 ```python

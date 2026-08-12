@@ -1,0 +1,10 @@
+{
+  "python.defaultInterpreterPath": "/home/icy/miniconda3/envs/mp/bin/python",
+  "python.terminal.activateEnvironment": false,
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/../MePhC"
+  ],
+  "terminal.integrated.env.linux": {
+    "PYTHONPATH": "${workspaceFolder}/../MePhC"
+  }
+}

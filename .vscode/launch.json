@@ -1,0 +1,53 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "TriLatt: band_structure.py (default)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/band_structure.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/../MePhC"
+      }
+    },
+    {
+      "name": "TriLatt: frequency_at_k.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/frequency_at_k.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/../MePhC"
+      }
+    },
+    {
+      "name": "TriLatt: berry_curvature.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/berry_curvature.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/../MePhC"
+      }
+    },
+    {
+      "name": "TriLatt: efs.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/efs.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/../MePhC"
+      }
+    }
+  ]
+}
