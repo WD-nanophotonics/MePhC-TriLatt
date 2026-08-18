@@ -11,7 +11,9 @@ from mephc.deformation import AnalyticDeformationField, periodic_supercell_field
 
 # Editable R6.2 parameters. q_points are generic fractional supercell points.
 replication = (2, 2)
-q_points = ((0.0, 0.0), (0.25, 0.0), (0.25, 0.25))
+q_points = None  # explicit callers may still supply q_points directly
+q_path_anchors = ((0.0, 0.0), (0.25, 0.0), (0.25, 0.25))
+q_path_subdivisions = (1, 1)
 resolution = 16
 num_bands = 2
 demo_amplitude = 0.02
@@ -74,6 +76,46 @@ def make_verified_field(*, replication=None, amplitude=None):
     base_field = _periodic_demonstration_field(lattice, replication_value, amplitude_value)
     return periodic_supercell_field(base_field, lattice, replication_value)
 
+
+def build_q_path(*, anchors=None, subdivisions=None):
+    """Expand generic fractional-supercell anchors into one ordered path."""
+    values = q_path_anchors if anchors is None else anchors
+    array = np.asarray(values, dtype=float)
+    if array.ndim != 2 or array.shape[1] != 2 or array.shape[0] < 2:
+        raise ValueError("q_path_anchors must contain at least two finite 2D points.")
+    if not np.all(np.isfinite(array)):
+        raise ValueError("q_path_anchors must contain only finite values.")
+    segment_count = len(array) - 1
+    raw = q_path_subdivisions if subdivisions is None else subdivisions
+    if isinstance(raw, Integral) and not isinstance(raw, bool):
+        normalized = [int(raw)] * segment_count
+    else:
+        if isinstance(raw, (str, bytes)) or not hasattr(raw, "__len__"):
+            raise ValueError("q_path_subdivisions must be an integer or a sequence of integers.")
+        if len(raw) != segment_count:
+            raise ValueError("q_path_subdivisions must match the number of path segments.")
+        normalized = []
+        for value in raw:
+            if not isinstance(value, Integral) or isinstance(value, bool):
+                raise ValueError("q_path_subdivisions values must be integers >= 1.")
+            normalized.append(int(value))
+    if any(value < 1 for value in normalized):
+        raise ValueError("q_path_subdivisions values must be integers >= 1.")
+    expanded = [array[0].copy()]
+    anchor_indices = [0]
+    for index, count in enumerate(normalized):
+        start = array[index]
+        end = array[index + 1]
+        for step in range(1, count + 1):
+            expanded.append(start + (end - start) * (step / count))
+        anchor_indices.append(len(expanded) - 1)
+    return {
+        "q_points": [list(map(float, point)) for point in expanded],
+        "q_path_anchors": [list(map(float, point)) for point in array],
+        "q_path_subdivisions": normalized,
+        "q_path_anchor_indices": anchor_indices,
+        "q_path_anchor_labels": [f"q{index}" for index in range(len(array))],
+    }
 
 def replication_default():
     return replication

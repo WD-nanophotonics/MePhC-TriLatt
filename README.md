@@ -135,6 +135,18 @@ field identity, while the task identity includes the ordered q-points and a
 q-point digest. Saved payloads contain scientific arrays and provenance only;
 solver, Band, and field runtime objects are never persisted.
 
+R6.5 lets the config use generic anchors instead of hand-writing dense q-points:
+
+```python
+q_path_anchors = ((0.0, 0.0), (0.25, 0.0), (0.25, 0.25))
+q_path_subdivisions = (1, 1)  # equal interval counts per segment; scalar is also accepted
+```
+
+Each subdivision count is an integer number of interpolation intervals. Shared
+anchor vertices occur once, the expanded ordered q-point list remains the cache
+identity, and plots show only generic `q0`, `q1`, ... anchor ticks. Explicit
+programmatic `q_points=` arguments remain authoritative for that call.
+
 The same entry point supports the bounded record modes below through
 `supercell_config.py`:
 

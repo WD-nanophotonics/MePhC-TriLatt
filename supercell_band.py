@@ -40,6 +40,19 @@ def _validate_q_points(value):
     return tuple(tuple(float(component) for component in point) for point in array)
 
 
+def _resolve_q_points(config_module, explicit_q_points):
+    """Return explicit q-points or the configured generic polyline."""
+    if explicit_q_points is not None:
+        return _validate_q_points(explicit_q_points), None
+    builder = getattr(config_module, "build_q_path", None)
+    if callable(builder):
+        path_data = builder()
+        return _validate_q_points(path_data["q_points"]), dict(path_data)
+    configured = getattr(config_module, "q_points", None)
+    if configured is None:
+        raise ValueError("config must provide build_q_path() or explicit q_points")
+    return _validate_q_points(configured), None
+
 def _field_replication(field):
     if not isinstance(field, PeriodicSupercellField):
         raise TypeError("R6 runner requires a PeriodicSupercellField.")
@@ -172,7 +185,7 @@ def compute_supercell_band(
     num_bands=None,
 ):
     """Run the R6 adapter with a verified caller field and generic q-points."""
-    q_points = _validate_q_points(config_module.q_points if q_points is None else q_points)
+    q_points, q_path_metadata = _resolve_q_points(config_module, q_points)
     resolution = _positive_integer(
         config_module.resolution if resolution is None else resolution,
         "resolution",
@@ -206,6 +219,7 @@ def compute_supercell_band(
         "q_point_coordinate": Q_POINT_COORDINATE,
         "sample_coordinate": np.arange(len(q_points), dtype=float),
         **path_data,
+        "q_path_metadata": q_path_metadata,
         "freqs": normalized,
         "actual_freqs": actual,
         "replication": replication,
@@ -224,7 +238,7 @@ def _persistent_data(result, identity):
     if "q_points_cartesian" not in result:
         path_data = dict(result)
         path_data.update(_reciprocal_path_data(result["field"], result["q_points"]))
-    return {
+    data = {
         "q_points": np.asarray(result["q_points"], dtype=float).tolist(),
         "q_point_coordinate": Q_POINT_COORDINATE,
         "sample_coordinate": np.asarray(result["sample_coordinate"], dtype=float).tolist(),
@@ -239,6 +253,15 @@ def _persistent_data(result, identity):
         "field_metadata": result["field_metadata"],
         "field_record_identity": identity,
     }
+    path_metadata = result.get("q_path_metadata")
+    if path_metadata is not None:
+        data.update({
+            "q_path_anchors": path_metadata["q_path_anchors"],
+            "q_path_subdivisions": list(path_metadata["q_path_subdivisions"]),
+            "q_path_anchor_indices": list(path_metadata["q_path_anchor_indices"]),
+            "q_path_anchor_labels": list(path_metadata["q_path_anchor_labels"]),
+        })
+    return data
 
 
 def compute_supercell_band_record(
@@ -260,7 +283,7 @@ def compute_supercell_band_record(
     if record_path is not None:
         path = Path(record_path)
         return load_record(path), path, None
-    q_points = _validate_q_points(config_module.q_points if q_points is None else q_points)
+    q_points, q_path_metadata = _resolve_q_points(config_module, q_points)
     resolution = _positive_integer(
         config_module.resolution if resolution is None else resolution,
         "resolution",
@@ -296,6 +319,8 @@ def compute_supercell_band_record(
         resolution=resolution,
         num_bands=num_bands,
     )
+    if q_path_metadata is not None:
+        result["q_path_metadata"] = q_path_metadata
     record = make_record(
         RECORD_KIND,
         geometry_id,
@@ -347,7 +372,16 @@ def plot_supercell_band(result, *, use_actual=True, save=False, show=False, imag
     )
     axis.set_ylabel("Frequency (THz)" if use_actual else "Normalized frequency")
     axis.set_title("TriLatt periodic-supercell band record")
-    axis.set_xticks(x_values)
+    anchor_indices = result.get("q_path_anchor_indices")
+    anchor_labels = result.get("q_path_anchor_labels")
+    if anchor_indices is not None and anchor_labels is not None:
+        indices = np.asarray(anchor_indices, dtype=int)
+        if len(indices) != len(anchor_labels) or np.any(indices < 0) or np.any(indices >= len(x_values)):
+            raise ValueError("q_path anchor tick metadata does not match the q-point path")
+        axis.set_xticks(x_values[indices])
+        axis.set_xticklabels(anchor_labels)
+    else:
+        axis.set_xticks(x_values)
     axis.grid(axis="y", linestyle=":", linewidth=0.5, alpha=0.75)
     axis.legend()
     output_path = None
