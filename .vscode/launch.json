@@ -48,6 +48,18 @@
       "env": {
         "PYTHONPATH": "${workspaceFolder}/../MePhC"
       }
+    },
+    {
+      "name": "TriLatt: supercell_band.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/supercell_band.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/../MePhC"
+      }
     }
   ]
 }
