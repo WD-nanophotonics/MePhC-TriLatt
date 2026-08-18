@@ -53,6 +53,25 @@ def _field_replication(field):
     return list(values)
 
 
+def _reciprocal_path_data(field, q_points):
+    """Derive generic Cartesian q-points and cumulative reciprocal distance."""
+    field.require_verified()
+    basis = np.asarray(field.reciprocal_basis, dtype=float)
+    if basis.shape != (2, 2) or not np.all(np.isfinite(basis)):
+        raise ValueError("verified field reciprocal basis must be finite 2D data")
+    points = np.asarray(q_points, dtype=float)
+    cartesian = points @ basis.T
+    increments = np.linalg.norm(np.diff(cartesian, axis=0), axis=1)
+    distance = np.concatenate(([0.0], np.cumsum(increments)))
+    if not np.all(np.isfinite(distance)) or np.any(np.diff(distance) < 0.0):
+        raise ValueError("reciprocal path distance must be finite and monotonic")
+    return {
+        "q_points_cartesian": cartesian,
+        "reciprocal_path_distance": distance,
+        "reciprocal_basis": basis,
+    }
+
+
 def _canonical_json(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
@@ -165,6 +184,7 @@ def compute_supercell_band(
     if field is None:
         field = config_module.make_verified_field()
     replication = _field_replication(field)
+    path_data = _reciprocal_path_data(field, q_points)
     solver, metadata = build_supercell_solver(
         config_module,
         field,
@@ -185,6 +205,7 @@ def compute_supercell_band(
         "q_points": np.asarray(q_points, dtype=float),
         "q_point_coordinate": Q_POINT_COORDINATE,
         "sample_coordinate": np.arange(len(q_points), dtype=float),
+        **path_data,
         "freqs": normalized,
         "actual_freqs": actual,
         "replication": replication,
@@ -199,10 +220,17 @@ def compute_supercell_band(
 
 def _persistent_data(result, identity):
     """Project an R6 result to scientific/provenance data only."""
+    path_data = result
+    if "q_points_cartesian" not in result:
+        path_data = dict(result)
+        path_data.update(_reciprocal_path_data(result["field"], result["q_points"]))
     return {
         "q_points": np.asarray(result["q_points"], dtype=float).tolist(),
         "q_point_coordinate": Q_POINT_COORDINATE,
         "sample_coordinate": np.asarray(result["sample_coordinate"], dtype=float).tolist(),
+        "q_points_cartesian": np.asarray(path_data["q_points_cartesian"], dtype=float).tolist(),
+        "reciprocal_path_distance": np.asarray(path_data["reciprocal_path_distance"], dtype=float).tolist(),
+        "reciprocal_basis": np.asarray(path_data["reciprocal_basis"], dtype=float).tolist(),
         "freqs": np.asarray(result["freqs"], dtype=float).tolist(),
         "actual_freqs": np.asarray(result["actual_freqs"], dtype=float).tolist(),
         "replication": list(result["replication"]),
@@ -296,9 +324,13 @@ def compute_supercell_band_record(
 
 
 def plot_supercell_band(result, *, use_actual=True, save=False, show=False, image_path=None):
-    """Plot frequency versus generic q-point sample index."""
+    """Plot frequency versus reciprocal path, with legacy raw fallback."""
     values = np.asarray(result["actual_freqs"] if use_actual else result["freqs"], dtype=float)
-    x_values = np.asarray(result["sample_coordinate"], dtype=float)
+    uses_reciprocal_path = "reciprocal_path_distance" in result
+    x_values = np.asarray(
+        result["reciprocal_path_distance"] if uses_reciprocal_path else result["sample_coordinate"],
+        dtype=float,
+    )
     fig, axis = plt.subplots(figsize=(6.0, 4.5))
     for band_index in range(values.shape[1]):
         axis.plot(
@@ -308,7 +340,11 @@ def plot_supercell_band(result, *, use_actual=True, save=False, show=False, imag
             linewidth=1.4,
             label=f"band {band_index + 1}",
         )
-    axis.set_xlabel("Generic q-point sample index")
+    axis.set_xlabel(
+        "Generic reciprocal-path distance"
+        if uses_reciprocal_path
+        else "Generic q-point sample index"
+    )
     axis.set_ylabel("Frequency (THz)" if use_actual else "Normalized frequency")
     axis.set_title("TriLatt periodic-supercell band record")
     axis.set_xticks(x_values)
@@ -334,6 +370,12 @@ def plot_supercell_band_record(
         record = load_record(record_path_value)
     else:
         record = record_or_path
+    required = ("q_points_cartesian", "reciprocal_path_distance", "reciprocal_basis")
+    missing = [name for name in required if name not in record.get("data", {})]
+    if missing:
+        raise ValueError(
+            "R6.4 record is missing reciprocal-path data: " + ", ".join(missing)
+        )
     if save and image_path is None:
         if record_path_value is None:
             raise ValueError("image_path is required when saving an in-memory record.")

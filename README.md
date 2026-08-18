@@ -124,9 +124,12 @@ analytic or sampled field.
 `supercell_band.py` consumes the verified `PeriodicSupercellField` returned by
 that hook and takes the field's own supercell metadata as the replication
 authority. It calls the existing `r5_deformation.build_supercell_solver`,
-returns normalized and THz frequency arrays, and plots against a generic
-q-point sample index. The q-points are never labeled Gamma, K, M, or X.
-R6.3 adds persistent records without changing MePhC: the record namespace
+returns normalized and THz frequency arrays, and plots against the
+cumulative generic reciprocal-path distance derived from the verified field's
+reciprocal basis. Cartesian q-points, path distances, and the basis provenance
+are stored in the record so plot-only mode remains adapter-free. The q-points
+are never labeled Gamma, K, M, or X.
+R6.3/R6.4 add persistent records without changing MePhC: the record namespace
 includes the base TriLatt geometry and a SHA-256 digest of the complete R5
 field identity, while the task identity includes the ordered q-points and a
 q-point digest. Saved payloads contain scientific arrays and provenance only;
