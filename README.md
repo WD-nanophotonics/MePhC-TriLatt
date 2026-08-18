@@ -98,10 +98,17 @@ retained.
 
 For non-identity deformation, `auto` mode does not reuse C3 reduction,
 K-centered HBZ assumptions, or fixed reference K coordinates. The current BZ
-and current reciprocal coordinates are stored in metadata. This workflow is
-limited to global affine periodic deformation; local/non-affine deformation,
-supercells, automatic symmetry discovery, and the SqrLatt downstream project
-remain out of scope. Record data and rendering metadata are separate: solver
+and current reciprocal coordinates are stored in metadata. This entry-point
+workflow is limited to global affine periodic deformation; local/non-affine
+deformation, automatic symmetry discovery, and the SqrLatt downstream project
+remain out of scope. A bounded, programmatic R6 periodic-supercell adapter is
+available in `r5_deformation.py` through `build_supercell_solver(...)`. It
+requires a verified `PeriodicSupercellField`, diagonal replication, and
+explicit `q_points`, `resolution`, and `num_bands`, and runs the TE
+adapter. This is not transparent periodic-supercell support in all user entry
+scripts and does not provide nonperiodic finite/local deformation solver
+support, transport, far-field, automatic symmetry discovery, or R7+
+production capability. Record data and rendering metadata are separate: solver
 parameters identify and cache the `.pkl` record, while plot settings only
 control regeneration of derived images.
 
