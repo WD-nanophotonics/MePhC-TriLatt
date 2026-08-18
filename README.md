@@ -126,8 +126,28 @@ that hook and takes the field's own supercell metadata as the replication
 authority. It calls the existing `r5_deformation.build_supercell_solver`,
 returns normalized and THz frequency arrays, and plots against a generic
 q-point sample index. The q-points are never labeled Gamma, K, M, or X.
-Persistent record/cache integration remains out of scope; use the existing
-primitive-cell workflows for recorded calculations.
+R6.3 adds persistent records without changing MePhC: the record namespace
+includes the base TriLatt geometry and a SHA-256 digest of the complete R5
+field identity, while the task identity includes the ordered q-points and a
+q-point digest. Saved payloads contain scientific arrays and provenance only;
+solver, Band, and field runtime objects are never persisted.
+
+The same entry point supports the bounded record modes below through
+`supercell_config.py`:
+
+```python
+run_mode = "auto"       # reuse exact record, otherwise compute and save
+run_mode = "compute"    # force MPB and refresh the canonical record
+run_mode = "plot_only"  # load a matching record; never run MPB
+archive_record = False
+record_path = None       # optional explicit historical record, trusted as-is
+reuse_requires_compute_match = True
+```
+
+`plot_only` and an exact cache hit do not instantiate the R6 MPB adapter.
+Changing the verified field, field identity, replication, ordered q-points,
+number of bands, resolution, or geometry prevents incompatible reuse. Plot
+settings only regenerate a derived image.
 
 Run it noninteractively with:
 

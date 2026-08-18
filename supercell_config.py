@@ -1,4 +1,4 @@
-"""User-editable configuration and periodic field for the bounded R6 entry."""
+"""User-editable configuration and periodic field for bounded R6/R6.2/R6.3."""
 
 from numbers import Integral, Real
 from pathlib import Path
@@ -15,6 +15,13 @@ q_points = ((0.0, 0.0), (0.25, 0.0), (0.25, 0.25))
 resolution = 16
 num_bands = 2
 demo_amplitude = 0.02
+
+# R6.3 record controls. Plot settings do not participate in identity matching.
+run_mode = "auto"
+archive_record = False
+record_path = None
+reuse_requires_compute_match = True
+save_tmp = True
 use_actual = True
 save_plot = False
 show_plot = False
@@ -71,13 +78,24 @@ def make_verified_field(*, replication=None, amplitude=None):
 def replication_default():
     return replication
 
+
 # Keep the existing TriLatt geometry/solver authority available to the R6
 # adapter while leaving the user-editable field definition in this module.
 def canonical_lattice():
     return trilatt_config.canonical_lattice()
 
+
+def geometry_id():
+    return trilatt_config.geometry_id()
+
+
+def geometry_parameters():
+    return trilatt_config.geometry_parameters()
+
+
 def build_pattern():
     return trilatt_config.build_pattern()
+
 
 def make_band(*args, **kwargs):
     return trilatt_config.make_band(*args, **kwargs)

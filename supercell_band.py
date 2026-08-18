@@ -1,12 +1,9 @@
-"""Bounded user-facing R6 periodic-supercell band runner.
-
-User field and run parameters live in ``supercell_config.py``. This runner
-accepts a caller-supplied verified ``PeriodicSupercellField`` directly and
-does not interpret or reconstruct its displacement formula.
-"""
+"""Bounded user-facing R6/R6.2/R6.3 periodic-supercell band workflow."""
 
 from numbers import Integral
 from pathlib import Path
+import hashlib
+import json
 import sys
 
 import matplotlib.pyplot as plt
@@ -18,7 +15,14 @@ if str(project_root) not in sys.path:
 
 import supercell_config
 from mephc.deformation import PeriodicSupercellField
+from mephc.r5 import record_identity
+from mephc.records import load_record, make_image_path, make_record
+from mephc.workflows import resolve_record, save_record_outputs
 from r5_deformation import build_supercell_solver
+
+
+Q_POINT_COORDINATE = "generic_fractional_supercell"
+RECORD_KIND = "band"
 
 
 def _positive_integer(value, name):
@@ -47,6 +51,75 @@ def _field_replication(field):
     if any(value < 1 for value in values):
         raise ValueError("field supercell replication must be positive.")
     return list(values)
+
+
+def _canonical_json(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _q_point_digest(q_points):
+    payload = [list(point) for point in q_points]
+    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()
+
+
+def _field_record_identity(config_module, field, replication):
+    field.require_verified()
+    if not getattr(field, "stable_identity", False) or not getattr(field.field, "stable_identity", False):
+        raise ValueError("E_R5_UNSTABLE_CALLABLE: field needs explicit stable_id before persistent record writes")
+    return record_identity(
+        field,
+        reference_lattice=config_module.canonical_lattice(),
+        replication=replication,
+    )
+
+
+def _record_namespace(config_module, identity):
+    base_geometry_id = config_module.geometry_id()
+    identity_digest = hashlib.sha256(
+        _canonical_json(identity).encode("utf-8")
+    ).hexdigest()
+    return (
+        f"TRILATT_SUPERCELL_{base_geometry_id}_"
+        f"FIELD_{identity_digest[:16]}"
+    ), identity_digest
+
+
+def _record_parameters(config_module, field, q_points, resolution, num_bands):
+    replication = _field_replication(field)
+    identity = _field_record_identity(config_module, field, replication)
+    identity_digest = hashlib.sha256(
+        _canonical_json(identity).encode("utf-8")
+    ).hexdigest()
+    q_digest = _q_point_digest(q_points)
+    geometry_id, namespace_digest = _record_namespace(config_module, identity)
+    if namespace_digest != identity_digest:
+        raise AssertionError("record namespace digest is not the field identity digest")
+    task_params = {
+        "num_bands": int(num_bands),
+        "q_points": [list(point) for point in q_points],
+        "q_point_coordinate": Q_POINT_COORDINATE,
+        "q_point_digest": q_digest,
+        "path": f"generic_q_{q_digest[:16]}",
+    }
+    compute_params = {
+        "resolution": int(resolution),
+        "polarization": "TE",
+        "geometry": config_module.geometry_parameters(),
+        "replication": list(replication),
+        "field_record_identity": identity,
+        "field_identity_sha256": identity_digest,
+    }
+    metadata = {
+        "schema": "trilatt.supercell_band_record.v1",
+        "base_geometry_id": config_module.geometry_id(),
+        "supercell_geometry_namespace": geometry_id,
+        "field_record_identity": identity,
+        "field_identity_sha256": identity_digest,
+        "replication": list(replication),
+        "q_point_digest": q_digest,
+        "q_point_coordinate": Q_POINT_COORDINATE,
+    }
+    return geometry_id, task_params, compute_params, metadata
 
 
 def _frequency_arrays(solver, band, *, point_count, requested_bands):
@@ -79,7 +152,7 @@ def compute_supercell_band(
     resolution=None,
     num_bands=None,
 ):
-    """Run R6 with a verified caller field and generic supercell q-points."""
+    """Run the R6 adapter with a verified caller field and generic q-points."""
     q_points = _validate_q_points(config_module.q_points if q_points is None else q_points)
     resolution = _positive_integer(
         config_module.resolution if resolution is None else resolution,
@@ -110,7 +183,7 @@ def compute_supercell_band(
     )
     return {
         "q_points": np.asarray(q_points, dtype=float),
-        "q_point_coordinate": "generic_fractional_supercell",
+        "q_point_coordinate": Q_POINT_COORDINATE,
         "sample_coordinate": np.arange(len(q_points), dtype=float),
         "freqs": normalized,
         "actual_freqs": actual,
@@ -122,6 +195,104 @@ def compute_supercell_band(
         "solver": solver,
         "metadata": metadata,
     }
+
+
+def _persistent_data(result, identity):
+    """Project an R6 result to scientific/provenance data only."""
+    return {
+        "q_points": np.asarray(result["q_points"], dtype=float).tolist(),
+        "q_point_coordinate": Q_POINT_COORDINATE,
+        "sample_coordinate": np.asarray(result["sample_coordinate"], dtype=float).tolist(),
+        "freqs": np.asarray(result["freqs"], dtype=float).tolist(),
+        "actual_freqs": np.asarray(result["actual_freqs"], dtype=float).tolist(),
+        "replication": list(result["replication"]),
+        "resolution": int(result["resolution"]),
+        "num_bands": int(result["num_bands"]),
+        "field_metadata": result["field_metadata"],
+        "field_record_identity": identity,
+    }
+
+
+def compute_supercell_band_record(
+    config_module=supercell_config,
+    *,
+    field=None,
+    q_points=None,
+    resolution=None,
+    num_bands=None,
+    run_mode="auto",
+    archive=False,
+    reuse_requires_compute_match=True,
+    record_path=None,
+    save=True,
+    save_tmp=True,
+    source_case=None,
+):
+    """Resolve, compute, save, or load a persistent R6.3 band record."""
+    if record_path is not None:
+        path = Path(record_path)
+        return load_record(path), path, None
+    q_points = _validate_q_points(config_module.q_points if q_points is None else q_points)
+    resolution = _positive_integer(
+        config_module.resolution if resolution is None else resolution,
+        "resolution",
+    )
+    num_bands = _positive_integer(
+        config_module.num_bands if num_bands is None else num_bands,
+        "num_bands",
+    )
+    if run_mode not in {"auto", "compute", "plot_only"}:
+        raise ValueError("run_mode must be 'auto', 'compute', or 'plot_only'.")
+    if field is None:
+        field = config_module.make_verified_field()
+    geometry_id, task_params, compute_params, metadata = _record_parameters(
+        config_module, field, q_points, resolution, num_bands
+    )
+    record, path = resolve_record(
+        project_root,
+        geometry_id,
+        RECORD_KIND,
+        task_params=task_params,
+        compute_params=compute_params,
+        run_mode=run_mode,
+        record_path=None,
+        reuse_requires_compute_match=reuse_requires_compute_match,
+    )
+    if record is not None:
+        return record, path, None
+
+    result = compute_supercell_band(
+        config_module,
+        field=field,
+        q_points=q_points,
+        resolution=resolution,
+        num_bands=num_bands,
+    )
+    record = make_record(
+        RECORD_KIND,
+        geometry_id,
+        task_params=task_params,
+        compute_params=compute_params,
+        data=_persistent_data(result, metadata["field_record_identity"]),
+        source_case=source_case,
+    )
+    record["metadata"] = metadata
+    canonical_path, latest_path = save_record_outputs(
+        project_root,
+        geometry_id,
+        RECORD_KIND,
+        task_params,
+        record,
+        archive=archive,
+        archive_params={
+            "num_bands": num_bands,
+            "path": task_params["path"],
+        },
+        save=save,
+        save_tmp=save_tmp,
+        tmp_name="supercell_band_latest.pkl",
+    )
+    return record, canonical_path, latest_path
 
 
 def plot_supercell_band(result, *, use_actual=True, save=False, show=False, image_path=None):
@@ -139,7 +310,7 @@ def plot_supercell_band(result, *, use_actual=True, save=False, show=False, imag
         )
     axis.set_xlabel("Generic q-point sample index")
     axis.set_ylabel("Frequency (THz)" if use_actual else "Normalized frequency")
-    axis.set_title("TriLatt R6.2 periodic-supercell band demonstration")
+    axis.set_title("TriLatt periodic-supercell band record")
     axis.set_xticks(x_values)
     axis.grid(axis="y", linestyle=":", linewidth=0.5, alpha=0.75)
     axis.legend()
@@ -153,24 +324,61 @@ def plot_supercell_band(result, *, use_actual=True, save=False, show=False, imag
     return fig, axis, output_path
 
 
-def main():
-    result = compute_supercell_band(supercell_config)
-    figure, _, image_path = plot_supercell_band(
-        result,
-        use_actual=supercell_config.use_actual,
-        save=supercell_config.save_plot,
-        show=supercell_config.show_plot,
+def plot_supercell_band_record(
+    record_or_path, *, use_actual=True, save=False, show=False, image_path=None
+):
+    """Render a saved record without constructing or running the MPB adapter."""
+    record_path_value = None
+    if isinstance(record_or_path, (str, Path)):
+        record_path_value = Path(record_or_path)
+        record = load_record(record_path_value)
+    else:
+        record = record_or_path
+    if save and image_path is None:
+        if record_path_value is None:
+            raise ValueError("image_path is required when saving an in-memory record.")
+        image_path = make_image_path(
+            project_root, record_path_value, record["geometry_id"]
+        )
+    return plot_supercell_band(
+        record["data"],
+        use_actual=use_actual,
+        save=save,
+        show=show,
+        image_path=image_path,
     )
-    if not supercell_config.show_plot:
-        plt.close(figure)
-    print("replication:", result["replication"])
-    print("q-point coordinate:", result["q_point_coordinate"])
-    print("normalized frequency shape:", result["freqs"].shape)
-    print("actual frequency shape:", result["actual_freqs"].shape)
-    print("finite normalized frequencies:", bool(np.all(np.isfinite(result["freqs"]))))
-    print("finite actual frequencies:", bool(np.all(np.isfinite(result["actual_freqs"]))))
+
+
+def main():
+    record, output_record_path, latest_path = compute_supercell_band_record(
+        supercell_config,
+        run_mode=supercell_config.run_mode,
+        archive=supercell_config.archive_record,
+        reuse_requires_compute_match=supercell_config.reuse_requires_compute_match,
+        record_path=supercell_config.record_path,
+        save_tmp=supercell_config.save_tmp,
+        source_case=str(project_root),
+    )
+    image_path = None
+    if supercell_config.save_plot or supercell_config.show_plot:
+        _, _, image_path = plot_supercell_band_record(
+            output_record_path,
+            use_actual=supercell_config.use_actual,
+            save=supercell_config.save_plot,
+            show=supercell_config.show_plot,
+        )
+    data = record["data"]
+    print("record:", output_record_path)
+    print("record mode:", supercell_config.run_mode)
+    print("cache hit:", latest_path is None and supercell_config.record_path is None)
+    print("replication:", data["replication"])
+    print("q-point coordinate:", data["q_point_coordinate"])
+    print("normalized frequency shape:", np.asarray(data["freqs"]).shape)
+    print("actual frequency shape:", np.asarray(data["actual_freqs"]).shape)
+    print("finite normalized frequencies:", bool(np.all(np.isfinite(data["freqs"]))))
+    print("finite actual frequencies:", bool(np.all(np.isfinite(data["actual_freqs"]))))
     print("image:", image_path)
-    return result
+    return record, output_record_path, image_path
 
 
 if __name__ == "__main__":
