@@ -105,6 +105,52 @@ class SupercellRecordTests(unittest.TestCase):
                     )
                 self.assertEqual(forced.call_count, 1)
 
+    def test_resolution_change_is_strict_cache_miss(self):
+        def fake_compute(config_module, *, field, q_points, resolution, num_bands):
+            values = np.full((len(q_points), num_bands), float(resolution))
+            return {
+                "q_points": np.asarray(q_points),
+                "q_point_coordinate": supercell_band.Q_POINT_COORDINATE,
+                "sample_coordinate": np.arange(len(q_points), dtype=float),
+                "freqs": values,
+                "actual_freqs": values * 10.0,
+                "replication": supercell_band._field_replication(field),
+                "resolution": resolution,
+                "num_bands": num_bands,
+                "field": field,
+                "field_metadata": field.metadata(),
+                "solver": object(),
+                "metadata": {},
+            }
+
+        with tempfile.TemporaryDirectory() as directory:
+            with patch.object(supercell_band, "project_root", Path(directory)):
+                with patch.object(supercell_band, "compute_supercell_band", side_effect=fake_compute) as first_adapter:
+                    supercell_band.compute_supercell_band_record(
+                        supercell_config,
+                        field=self.field,
+                        q_points=self.q_points,
+                        resolution=16,
+                        num_bands=2,
+                        run_mode="compute",
+                        reuse_requires_compute_match=True,
+                        save_tmp=False,
+                    )
+                self.assertEqual(first_adapter.call_count, 1)
+                with patch.object(supercell_band, "compute_supercell_band", side_effect=fake_compute) as second_adapter:
+                    record, _, _ = supercell_band.compute_supercell_band_record(
+                        supercell_config,
+                        field=self.field,
+                        q_points=self.q_points,
+                        resolution=17,
+                        num_bands=2,
+                        run_mode="auto",
+                        reuse_requires_compute_match=True,
+                        save_tmp=False,
+                    )
+                self.assertEqual(second_adapter.call_count, 1)
+                self.assertEqual(record["compute_params"]["resolution"], 17)
+
     def test_plot_only_missing_fails_before_adapter(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(supercell_band, "project_root", Path(directory)):

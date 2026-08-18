@@ -370,7 +370,7 @@ def main():
     data = record["data"]
     print("record:", output_record_path)
     print("record mode:", supercell_config.run_mode)
-    print("cache hit:", latest_path is None and supercell_config.record_path is None)
+    print("tmp record:", latest_path)
     print("replication:", data["replication"])
     print("q-point coordinate:", data["q_point_coordinate"])
     print("normalized frequency shape:", np.asarray(data["freqs"]).shape)
