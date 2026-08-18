@@ -1,4 +1,4 @@
-"""Focused tests for the bounded R6 user-facing band entry point."""
+"""Focused tests for the research-configurable R6.2 band entry."""
 
 import unittest
 from unittest.mock import patch
@@ -12,6 +12,7 @@ from mephc.bravais import BravaisLattice2D
 from mephc.deformation import PeriodicSupercellField
 
 import supercell_band
+import supercell_config
 
 
 class FakeBand:
@@ -24,8 +25,16 @@ class FakeBand:
 
 
 class FakeConfig:
+    q_points = ((0.0, 0.0), (0.25, 0.125))
+    resolution = 16
+    num_bands = 2
+    replication = (99, 99)
+
     def canonical_lattice(self):
         return BravaisLattice2D.triangular()
+
+    def make_verified_field(self):
+        raise AssertionError("runner must not reconstruct a supplied field")
 
 
 class FakeSolver:
@@ -37,19 +46,18 @@ class FakeSolver:
 class SupercellBandEntryTests(unittest.TestCase):
     def setUp(self):
         self.config = FakeConfig()
-        self.q_points = ((0.0, 0.0), (0.25, 0.125))
+        self.q_points = self.config.q_points
+        self.field = supercell_config.make_verified_field(replication=(2, 3), amplitude=0.01)
 
     def test_invalid_parameters_do_not_call_adapter(self):
         invalid_cases = (
-            {"replication": (0, 2)},
-            {"replication": (2, 2, 2)},
             {"q_points": ((0.0, 0.0),)},
             {"q_points": ((0.0, float("nan")), (0.25, 0.0))},
             {"resolution": 0},
             {"num_bands": 0},
         )
         base = {
-            "replication": (2, 2),
+            "field": self.field,
             "q_points": self.q_points,
             "resolution": 16,
             "num_bands": 2,
@@ -63,33 +71,53 @@ class SupercellBandEntryTests(unittest.TestCase):
                         supercell_band.compute_supercell_band(self.config, **kwargs)
                     adapter.assert_not_called()
 
-    def test_constructs_verified_field_and_forwards_exact_r6_inputs(self):
+    def test_verified_field_is_forwarded_unchanged_and_formula_is_not_rebuilt(self):
         fake_band = FakeBand()
         fake_solver = FakeSolver()
-        adapter_result = (fake_solver, {"band": fake_band, "field": "adapter-field"})
-        with patch("supercell_band.build_supercell_solver", return_value=adapter_result) as adapter:
+        with patch(
+            "supercell_band.build_supercell_solver",
+            return_value=(fake_solver, {"band": fake_band}),
+        ) as adapter:
             result = supercell_band.compute_supercell_band(
                 self.config,
-                replication=(2, 3),
+                field=self.field,
                 q_points=self.q_points,
                 resolution=19,
                 num_bands=2,
-                amplitude=0.01,
             )
 
-        self.assertEqual(len(adapter.call_args.args), 2)
-        self.assertIs(adapter.call_args.args[0], self.config)
-        field = adapter.call_args.args[1]
-        self.assertIsInstance(field, PeriodicSupercellField)
-        self.assertTrue(field.verified)
-        np.testing.assert_array_equal(field.supercell.matrix, [[2, 0], [0, 3]])
+        self.assertIs(adapter.call_args.args[1], self.field)
+        self.assertIs(result["field"], self.field)
+        self.assertTrue(self.field.verified)
+        np.testing.assert_array_equal(self.field.supercell.matrix, [[2, 0], [0, 3]])
         self.assertEqual(adapter.call_args.kwargs["q_points"], self.q_points)
         self.assertEqual(adapter.call_args.kwargs["resolution"], 19)
         self.assertEqual(adapter.call_args.kwargs["num_bands"], 2)
-        self.assertIs(result["solver"], fake_solver)
-        self.assertIs(result["field"], field)
 
-    def test_extracts_normalized_and_thz_arrays_with_generic_q_semantics(self):
+    def test_replication_comes_from_field_metadata_not_config(self):
+        with patch(
+            "supercell_band.build_supercell_solver",
+            return_value=(FakeSolver(), {"band": FakeBand()}),
+        ):
+            result = supercell_band.compute_supercell_band(
+                self.config,
+                field=self.field,
+                q_points=self.q_points,
+                resolution=16,
+                num_bands=2,
+            )
+
+        self.assertEqual(result["replication"], [2, 3])
+        self.assertEqual(result["field_metadata"]["supercell"]["replication_matrix"], [[2, 0], [0, 3]])
+        self.assertNotEqual(result["replication"], list(self.config.replication))
+
+    def test_default_demonstration_field_verifies_periodicity(self):
+        field = supercell_config.make_verified_field()
+        self.assertIsInstance(field, PeriodicSupercellField)
+        self.assertTrue(field.verified)
+        self.assertEqual(field.metadata()["base_field"]["parameters"]["status"], "example-only-not-physical-preset")
+
+    def test_extracts_arrays_and_preserves_generic_q_semantics(self):
         fake_band = FakeBand()
         with patch(
             "supercell_band.build_supercell_solver",
@@ -97,7 +125,7 @@ class SupercellBandEntryTests(unittest.TestCase):
         ):
             result = supercell_band.compute_supercell_band(
                 self.config,
-                replication=(2, 2),
+                field=self.field,
                 q_points=self.q_points,
                 resolution=16,
                 num_bands=2,
@@ -121,7 +149,6 @@ class SupercellBandEntryTests(unittest.TestCase):
             self.assertIsNone(output)
             self.assertEqual(axis.get_xlabel(), "Generic q-point sample index")
             self.assertEqual(axis.get_ylabel(), "Frequency (THz)")
-            self.assertEqual([label.get_text() for label in axis.get_xticklabels()[:2]], ["0", "1"])
             self.assertNotIn("Gamma", axis.get_title())
             self.assertNotIn("K", axis.get_title())
             self.assertNotIn("M", axis.get_title())

@@ -114,20 +114,20 @@ control regeneration of derived images.
 
 ## Periodic-supercell band entry
 
-`supercell_band.py` is the bounded user-facing R6 periodic-supercell
-workflow. Its editable parameters at the top of the file include diagonal
-`replication`, generic fractional supercell `q_points`,
-`resolution`, `num_bands`, and plot `show`/`save`
-controls. The q-points are intentionally generic fractional coordinates and
-are plotted by sample index; they are never labeled Gamma, K, M, or X.
+`supercell_config.py` is the user-editable R6.2 configuration and field hook.
+It defines diagonal `replication`, generic fractional supercell `q_points`,
+`resolution`, `num_bands`, and plot controls. Its default deterministic
+periodic field is explicitly an example rather than a physical material
+preset; researchers can replace `make_verified_field` with another verified
+analytic or sampled field.
 
-The entry constructs a deterministic periodic displacement field whose stable
-metadata identifies it as a demonstration. It is not a physical material
-preset. It calls the existing `r5_deformation.build_supercell_solver`
-adapter, returns normalized and THz frequency arrays, and can render a
-frequency-versus-generic-q plot. Persistent record/cache integration is out of
-scope for this entry; use the existing primitive-cell workflows for their
-recorded calculations.
+`supercell_band.py` consumes the verified `PeriodicSupercellField` returned by
+that hook and takes the field's own supercell metadata as the replication
+authority. It calls the existing `r5_deformation.build_supercell_solver`,
+returns normalized and THz frequency arrays, and plots against a generic
+q-point sample index. The q-points are never labeled Gamma, K, M, or X.
+Persistent record/cache integration remains out of scope; use the existing
+primitive-cell workflows for recorded calculations.
 
 Run it noninteractively with:
 
@@ -137,7 +137,7 @@ cd /home/icy/TriLatt
 ```
 
 The default is a small demonstration solve with no interactive window and no
-saved image. Set the top-level plot controls to save or display the figure.
+saved image. Edit `supercell_config.py` to change the field or plot controls.
 
 ## Band Berry coloring
 
